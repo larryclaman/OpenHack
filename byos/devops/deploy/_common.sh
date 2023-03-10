@@ -1,15 +1,19 @@
 check_azuresp_json() {
     if [ ! -f "${AZURE_SP_JSON}" ]; then
-        az ad sp create-for-rbac --role Owner --output json >"${AZURE_SP_JSON}"
-
-        _azure_parse_json
         export ARM_SUBSCRIPTION_ID=$(az account show --output tsv --query id)
+        az ad sp create-for-rbac --role Owner --scopes "/subscriptions/${ARM_SUBSCRIPTION_ID}" --output json >"${AZURE_SP_JSON}"
+
         # workaround for --sdk-auth deprecation to keep backwards compatibility
+        _azuresp_json=$(cat "${AZURE_SP_JSON}")
+        export ARM_CLIENT_ID=$(echo "${_azuresp_json}" | jq -c -r '.appId')
+        export ARM_CLIENT_SECRET=$(echo "${_azuresp_json}" | jq -c -r '.password')
+        export ARM_TENANT_ID=$(echo "${_azuresp_json}" | jq -c -r '.tenant')
+
         echo "${_azuresp_json}" | jq \
-            --arg clientId "$ARM_CLIENT_ID" \
-            --arg clientSecret "$ARM_CLIENT_SECRET" \
-            --arg subscriptionId "$ARM_SUBSCRIPTION_ID" \
-            --arg tenantId "$ARM_TENANT_ID" \
+            --arg clientId "${ARM_CLIENT_ID}" \
+            --arg clientSecret "${ARM_CLIENT_SECRET}" \
+            --arg subscriptionId "${ARM_SUBSCRIPTION_ID}" \
+            --arg tenantId "${ARM_TENANT_ID}" \
             --arg activeDirectoryEndpointUrl "https://login.microsoftonline.com" \
             --arg resourceManagerEndpointUrl "https://management.azure.com/" \
             --arg activeDirectoryGraphResourceId "https://graph.windows.net/" \
@@ -25,10 +29,10 @@ check_azuresp_json() {
 
 _azure_parse_json() {
     _azuresp_json=$(cat "${AZURE_SP_JSON}")
-    export ARM_CLIENT_ID=$(echo "${_azuresp_json}" | jq -c -r '.clientId')
-    export ARM_CLIENT_SECRET=$(echo "${_azuresp_json}" | jq -c -r '.clientSecret')
+    export ARM_CLIENT_ID=$(echo "${_azuresp_json}" | jq -c -r '.appId')
+    export ARM_CLIENT_SECRET=$(echo "${_azuresp_json}" | jq -c -r '.password')
     export ARM_SUBSCRIPTION_ID=$(echo "${_azuresp_json}" | jq -c -r '.subscriptionId')
-    export ARM_TENANT_ID=$(echo "${_azuresp_json}" | jq -c -r '.tenantId')
+    export ARM_TENANT_ID=$(echo "${_azuresp_json}" | jq -c -r '.tenant')
 }
 
 _azure_login() {
@@ -50,6 +54,10 @@ create_azure_resources() {
 
         az bicep upgrade
         _sp_object_id=$(az ad sp show --id "${ARM_CLIENT_ID}" --query objectId --output tsv)
+        if [ -z "$_sp_object_id" ]; then
+            _warning "objectId property not found, trying with id"
+            _sp_object_id=$(az ad sp show --id "${ARM_CLIENT_ID}" --query id --output tsv)
+        fi
         az deployment sub create --name "${UNIQUE_NAME}-${BUILD_ID}" --location "${AZURE_LOCATION}" --template-file azure.bicep --parameters resourcesPrefix="${UNIQUE_NAME}" spPrincipalId="${_sp_object_id}"
 
         _azure_logout
@@ -68,11 +76,12 @@ delete_azure_resources() {
 }
 
 get_unique_name() {
+    # Generate unique name
+    UNIQUER=$(head -3 /dev/urandom | LC_CTYPE=C tr -cd '[:digit:]' | cut -c -5)
+
     if [ ${#TEAM_NAME} -eq 0 ]; then
-        # Generate unique name
-        UNIQUER=$(head -3 /dev/urandom | LC_CTYPE=C tr -cd '[:digit:]' | cut -c -5)
         UNIQUE_NAME="${NAME_PREFIX}${UNIQUER}"
     else
-        UNIQUE_NAME="${NAME_PREFIX}${TEAM_NAME}"
+        UNIQUE_NAME=$(echo ${NAME_PREFIX}${TEAM_NAME} | cut -c -24)
     fi
 }

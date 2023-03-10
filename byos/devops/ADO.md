@@ -9,9 +9,9 @@ This lab deploys to a single resource group within an Azure subscription. To dep
 ## Prerequisites
 
 - [Azure Subscription](https://azure.microsoft.com/) with [Owner](https://docs.microsoft.com/en-us/azure/role-based-access-control/built-in-roles) role
-- [Azure DevOps organization](https://docs.microsoft.com/en-us/azure/devops/organizations/accounts/create-organization?view=azure-devops) with [Project Collection Administrators](https://docs.microsoft.com/en-us/azure/devops/organizations/security/lookup-organization-owner-admin?view=azure-devops#show-members-of-the-project-collection-administrators-group) membership
+- [Azure DevOps organization](https://docs.microsoft.com/en-us/azure/devops/organizations/accounts/create-organization?view=azure-devops) with [Project Collection Administrators](https://docs.microsoft.com/en-us/azure/devops/organizations/security/look-up-project-collection-administrators?view=azure-devops#show-members-of-the-project-collection-administrators-group) membership
 - Linux Bash ([Windows Subsystem for Linux (WSL)](https://docs.microsoft.com/en-us/windows/wsl/) works too)
-- [Azure CLI 2.32.0](https://docs.microsoft.com/en-us/cli/azure/install-azure-cli-linux) or higher
+- [Azure CLI 2.34.1](https://docs.microsoft.com/en-us/cli/azure/install-azure-cli-linux) or higher
 - [jq 1.5](https://stedolan.github.io/jq/download/) or higher
 
 > **NOTE** [Azure Cloud Shell](https://docs.microsoft.com/en-us/azure/cloud-shell/overview) is **supported** for the Azure DevOps deployment scenario and it's recommended solution.
@@ -85,7 +85,20 @@ az role assignment list --assignee $(az account show --output tsv --query user.n
 
 > **NOTE** New Azure DevOps organization dedicated only for the OpenHack is highly recommended!
 
-Login to your [Azure DevOps](https://dev.azure.com) organization and [Create a Personal Access Token](https://docs.microsoft.com/en-us/azure/devops/organizations/accounts/use-personal-access-tokens-to-authenticate?view=azure-devops&tabs=preview-page#create-a-pat) with scope: `Build:Read & execute; Code:Full; Extensions:Read & manage; Marketplace:Acquire; Project and Team:Read, write, & manage; Release: Read, write, execute, & manage; Service Connections:Read, query, & manage; Variable Groups:Read, create, & manage`. Then set environment variable `AZURE_DEVOPS_EXT_PAT` with the generated token.
+Login to your [Azure DevOps](https://dev.azure.com) organization and [Create a Personal Access Token](https://docs.microsoft.com/en-us/azure/devops/organizations/accounts/use-personal-access-tokens-to-authenticate?view=azure-devops&tabs=preview-page#create-a-pat) with scope: 
+
+```
+Build: Read & execute
+Code: Full
+Extensions: Read & manage
+Marketplace: Acquire
+Project and Team: Read, write, & manage
+Release: Read, write, execute, & manage
+Service Connections: Read, query, & manage
+Variable Groups: Read, create, & manage
+```
+
+Then set environment variable `AZURE_DEVOPS_EXT_PAT` with the generated token.
 
 > **NOTE**
 >
@@ -148,7 +161,6 @@ Run `deploy-ado.sh` bash script to start Azure & Azure DevOps configuration.
 > - southeastasia
 > - brazilsouth
 > - canadacentral
-> - southindia
 > - australiaeast
 > - westeurope
 > - westus2
@@ -167,6 +179,18 @@ Example end of the output from `deploy-ado.sh` script
 
 Add OpenHack team members to Azure Subscription with **Contributor** role, follow guide: [Assign Azure roles using the Azure portal
 ](https://docs.microsoft.com/en-us/azure/role-based-access-control/role-assignments-portal)
+
+#### Azure DevOps hosted agents availability limitation
+
+According to Azure Pipelines Grant announcements for [private](https://devblogs.microsoft.com/devops/change-in-azure-pipelines-grant-for-private-projects/) and [public](https://devblogs.microsoft.com/devops/change-in-azure-pipelines-grant-for-public-projects/) project, you may not be able to access hosted agents.
+
+##### Solution 1 - Purchase parallel jobs
+
+Setup [DevOps Organizational billing](https://docs.microsoft.com/en-us/azure/devops/organizations/billing/set-up-billing-for-your-organization-vs?view=azure-devops) with your Azure Subscription, and [purchase parallel jobs](https://docs.microsoft.com/en-us/azure/devops/pipelines/licensing/concurrent-jobs?view=azure-devops&tabs=ms-hosted#how-do-i-buy-more-parallel-jobs) for your pipeline(s).
+
+##### Solution 2 - VM Scale Set
+
+The deployment script deploys private agents based on [VM Scale Set](https://docs.microsoft.com/en-us/azure/devops/pipelines/agents/scale-set-agents?view=azure-devops) (Windows & Linux). So your role is just to create agent pools, and attach provisioned VMSS based on this guide: [Create the scale set agent pool](https://docs.microsoft.com/en-us/azure/devops/pipelines/agents/scale-set-agents?view=azure-devops#create-the-scale-set-agent-pool)
 
 ### Azure DevOps post-deployment steps
 

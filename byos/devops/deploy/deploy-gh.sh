@@ -59,7 +59,7 @@ if [ ${#AZURE_LOCATION} -eq 0 ]; then
     exit 1
 fi
 
-declare -a unsupported_azure_regions=("koreasouth" "westindia" "australiacentral" "australiacentral2" "brazilsoutheast" "francesouth" "germanynorth" "swedencentral" "swedensouth" "uaecentral" "centraluseuap" "eastus2euap" "norwaywest" "westcentralus" "southafricawest")
+declare -a unsupported_azure_regions=("koreasouth" "westindia" "australiacentral" "australiacentral2" "brazilsoutheast" "francesouth" "germanynorth" "swedencentral" "swedensouth" "uaecentral" "centraluseuap" "eastus2euap" "norwaywest" "westcentralus" "southafricawest" "southindia")
 if [[ "${unsupported_azure_regions[*]}" =~ "${AZURE_LOCATION}" ]]; then
     _error "Provided region (${AZURE_LOCATION}) is not supported."
     _error "Unsupported regions:"
@@ -82,7 +82,7 @@ fi
 # Check for programs
 declare -a commands=("az" "jq" "gh" "curl")
 check_commands "${commands[@]}"
-check_tool_semver "azure-cli" $(az version --output tsv --query \"azure-cli\") "2.32.0"
+check_tool_semver "azure-cli" $(az version --output tsv --query \"azure-cli\") "2.34.1"
 
 # CREATE AN ORGANIZATION REPOSITORY
 # https://docs.github.com/en/rest/reference/repos#create-a-repository-using-a-template

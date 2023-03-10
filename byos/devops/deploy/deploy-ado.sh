@@ -58,7 +58,7 @@ if [ ${#AZURE_LOCATION} -eq 0 ]; then
     exit 1
 fi
 
-declare -a supported_azure_regions=("centralus" "uksouth" "eastasia" "southeastasia" "brazilsouth" "canadacentral" "southindia" "australiaeast" "westeurope" "westus2")
+declare -a supported_azure_regions=("centralus" "uksouth" "eastasia" "southeastasia" "brazilsouth" "canadacentral" "australiaeast" "westeurope" "westus2")
 if [[ ! "${supported_azure_regions[*]}" =~ "${AZURE_LOCATION}" ]]; then
     _error "Provided region (${AZURE_LOCATION}) is not supported."
     _error "Supported regions:"
@@ -79,9 +79,9 @@ if [ -z ${AZURE_DEVOPS_EXT_PAT+x} ]; then
 fi
 
 # Check for programs
-declare -a commands=("az" "jq")
+declare -a commands=("az" "jq" "ssh-keygen")
 check_commands "${commands[@]}"
-check_tool_semver "azure-cli" $(az version --output tsv --query \"azure-cli\") "2.32.0"
+check_tool_semver "azure-cli" $(az version --output tsv --query \"azure-cli\") "2.34.1"
 
 _azdevopsver=$(az extension show --only-show-errors --name azure-devops --output tsv --query version)
 if [ "${#_azdevopsver}" -eq 0 ]; then
@@ -148,6 +148,37 @@ ado_logout() {
     export AZURE_DEVOPS_EXT_PAT=0
 }
 
+# ADO VMSS Agents
+
+deploy_adovmsswinagent() {
+    _azure_login
+
+    declare -r WINPASS=$(head -3 /dev/urandom | LC_CTYPE=C tr -cd '[:alnum:][:punct:]' | cut -c -16)
+    az deployment sub create --name "winagent${UNIQUER}-${BUILD_ID}" --location "${AZURE_LOCATION}" --template-file adovmssagent/main.bicep --parameters uniquer="${UNIQUER}" os="win" adminPasswordOrKey="${WINPASS}"
+
+    _azure_logout
+}
+
+deploy_adovmsslnxagent() {
+    _azure_login
+
+    prvKeyPath="$(pwd)/id_rsa"
+    pubKeyPath="$(pwd)/id_rsa.pub"
+
+    ssh-keygen -m PEM -t rsa -b 4096 -f "${prvKeyPath}" -N '' <<<$'\ny' >/dev/null 2>&1
+
+    if [ -f "${prvKeyPath}" ] && [ -f "${pubKeyPath}" ]; then
+        privateSshKey=$(<"${prvKeyPath}")
+        publicSshKey=$(<"${pubKeyPath}")
+    else
+        echo >&2 "Provate SSH key file or public SSH key file not exist, please check!"
+        exit 1
+    fi
+    az deployment sub create --name "lnxagent${UNIQUER}-${BUILD_ID}" --location "${AZURE_LOCATION}" --template-file adovmssagent/main.bicep --parameters uniquer="${UNIQUER}" os="lnx" adminPasswordOrKey="${publicSshKey}"
+
+    _azure_logout
+}
+
 save_details() {
     jq -n \
         --arg teamName "${UNIQUE_NAME}" \
@@ -161,7 +192,8 @@ save_details() {
         --arg TFSTATE_STORAGE_ACCOUNT_NAME "${UNIQUE_NAME}statest" \
         --arg TFSTATE_STORAGE_CONTAINER_NAME "tfstate" \
         --arg TFSTATE_KEY "terraform.tfstate" \
-        '{teamName: $teamName, orgName: $orgName, boardUrl: $boardUrl, projectUrl: $projectUrl, teamUrl: $teamUrl, repoUrl: $repoUrl, azRgTfState: $azRgTfState, TFSTATE_RESOURCES_GROUP_NAME: $TFSTATE_RESOURCES_GROUP_NAME, TFSTATE_STORAGE_ACCOUNT_NAME: $TFSTATE_STORAGE_ACCOUNT_NAME, TFSTATE_STORAGE_CONTAINER_NAME: $TFSTATE_STORAGE_CONTAINER_NAME, TFSTATE_KEY: $TFSTATE_KEY}' >"${DETAILS_FILE}"
+        --arg WINPASS "${WINPASS}" \
+        '{teamName: $teamName, orgName: $orgName, boardUrl: $boardUrl, projectUrl: $projectUrl, teamUrl: $teamUrl, repoUrl: $repoUrl, azRgTfState: $azRgTfState, TFSTATE_RESOURCES_GROUP_NAME: $TFSTATE_RESOURCES_GROUP_NAME, TFSTATE_STORAGE_ACCOUNT_NAME: $TFSTATE_STORAGE_ACCOUNT_NAME, TFSTATE_STORAGE_CONTAINER_NAME: $TFSTATE_STORAGE_CONTAINER_NAME, TFSTATE_KEY: $TFSTATE_KEY, WINPASS: $WINPASS}' >"${DETAILS_FILE}"
 }
 
 # EXECUTE
@@ -194,6 +226,12 @@ ado_variablegroup_create
 
 _information "ADO logout..."
 ado_logout
+
+_information "Deploying ADO VMSS Windows Agent..."
+deploy_adovmsswinagent
+
+_information "Deploying ADO VMSS Linux Agent..."
+deploy_adovmsslnxagent
 
 _information "Saving details to ${DETAILS_FILE} file..."
 save_details
